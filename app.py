@@ -56,18 +56,19 @@ with col3:
 # --- Logged Out State ---
 if not st.session_state["logged_in"]:
     tabs = st.tabs(["Login", "Sign Up"])
-    
+
     # -------- Login Tab --------
     with tabs[0]:
         st.subheader("Login")
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_pass")
+
         if st.button("Login"):
-            # Call the new safe login function
             res = login(email, password)
 
+            # --- Safe handling of login response ---
             if not res or res.get("error"):
-                st.error(res.get("error", "Login failed. Please check credentials."))
+                st.error(res.get("error", "Login failed. Check credentials."))
             elif not res.get("session") or not res.get("user"):
                 st.error("Login failed: No session returned. Check credentials or Supabase auth.")
             else:
@@ -76,7 +77,7 @@ if not st.session_state["logged_in"]:
                     "user_id": res["user"].get("id"),
                     "role": res.get("role", "user"),
                     "full_name": get_user_name(res["user"].get("id")),
-                    "access_token": res["session"].get("access_token"),
+                    "access_token": res["session"].get("access_token"),  # JWT for file uploads
                     "trigger_rerun": not st.session_state["trigger_rerun"]
                 })
                 st.experimental_rerun()
@@ -90,7 +91,7 @@ if not st.session_state["logged_in"]:
         role = st.selectbox("Role", ["patient", "doctor"])
         if st.button("Sign Up"):
             res = signup(email, password, role, full_name)
-            if "error" in res:
+            if res.get("error"):
                 st.error(res["error"])
             else:
                 st.success("Signup successful! Please login.")
@@ -100,7 +101,7 @@ else:
     st.success(f"Welcome, {st.session_state.get('full_name', 'User')}!")
     st.info(f"You are logged in as: {st.session_state['role']}")
     st.info("Go to your dashboard from the left panel (Streamlit Pages).")
-    
+
     if st.button("Logout"):
         st.session_state.update({
             "logged_in": False,
