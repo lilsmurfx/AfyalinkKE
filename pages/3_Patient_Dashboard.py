@@ -2,7 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-from utils.database import get_patient_records, get_user_appointments, get_user_name
+from utils.database import (
+    get_patient_records,
+    get_user_appointments,
+    get_user_name,
+    upload_patient_file,
+    get_patient_files
+)
 
 # --- Access control ---
 if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
@@ -17,7 +23,7 @@ st.set_page_config(page_title="Patient Dashboard", layout="wide")
 user_id = st.session_state["user_id"]
 user_name = get_user_name(user_id)
 
-# --- Custom CSS for cards and sections ---
+# --- Custom CSS ---
 st.markdown("""
 <style>
 .card {
@@ -64,21 +70,12 @@ st.markdown(f"""
 # --- Fetch Data ---
 records = get_patient_records(user_id)
 appointments = get_user_appointments(user_id, "patient")
+uploaded_files = get_patient_files(user_id)
 
 # --- Metrics Cards ---
 total_visits = len(records)
 total_appointments = len(appointments)
-
-# --- FIXED: Safely parse appointment times ---
-upcoming_appt = None
-for a in appointments:
-    try:
-        appt_time = pd.to_datetime(a["appointment_time"])
-        if not upcoming_appt or appt_time < upcoming_appt:
-            if appt_time > datetime.now():
-                upcoming_appt = appt_time
-    except Exception:
-        pass
+upcoming_appt = pd.to_datetime(appointments[0]['appointment_time']) if appointments else None
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -109,7 +106,7 @@ st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown('<div class="section-title">📅 Your Appointments</div>', unsafe_allow_html=True)
 if appointments:
     appt_df = pd.DataFrame(appointments)
-    appt_df['appointment_time'] = pd.to_datetime(appt_df['appointment_time'], errors='coerce')
+    appt_df['appointment_time'] = pd.to_datetime(appt_df['appointment_time'])
     appt_df = appt_df.sort_values('appointment_time')
     st.dataframe(appt_df[['appointment_time', 'status']], height=250)
 
@@ -128,4 +125,19 @@ st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown('<div class="section-title">🧾 Upload Lab Reports / Prescriptions</div>', unsafe_allow_html=True)
 uploaded_file = st.file_uploader("Choose a file", type=["pdf", "png", "jpg", "jpeg"])
 if uploaded_file:
-    st.success(f"File '{uploaded_file.name}' uploaded successfully!")
+    try:
+        file_path = upload_patient_file(user_id, uploaded_file)
+        st.success(f"File '{uploaded_file.name}' uploaded successfully!")
+        # Refresh uploaded files list
+        uploaded_files = get_patient_files(user_id)
+    except Exception as e:
+        st.error(f"Upload failed: {e}")
+
+# --- Display Uploaded Files ---
+st.markdown('<div class="section-title">📁 Your Uploaded Files</div>', unsafe_allow_html=True)
+if uploaded_files:
+    files_df = pd.DataFrame(uploaded_files)
+    files_df['uploaded_at'] = pd.to_datetime(files_df['uploaded_at'])
+    st.dataframe(files_df[['original_name', 'file_name', 'uploaded_at']], height=250)
+else:
+    st.info("No files uploaded yet.")
