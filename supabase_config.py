@@ -1,0 +1,7 @@
+from supabase import create_client, Client
+
+url = "https://jrbozblfmecmyxkdfgtx.supabase.co"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyYm96YmxmbWVjbXl4a2RmZ3R4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0NTUxMDQsImV4cCI6MjA3OTAzMTEwNH0.YqIy_CAlnE3aqnbEokn-AiV5eq0td0t5jh3O8cxgat8"
+anon = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyYm96YmxmbWVjbXl4a2RmZ3R4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzQ1NTEwNCwiZXhwIjoyMDc5MDMxMTA0fQ.fQfaaOUwqNSBwT7-0-O3vxOW_SMeUzLFEFG8tnrgfKU"
+
+supabase: Client = create_client(url, key)
