@@ -5,14 +5,9 @@ from utils.database import get_user_name
 st.set_page_config(page_title="AfyaLink", layout="wide")
 
 # --- Initialize session state ---
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-if "trigger_rerun" not in st.session_state:
-    st.session_state["trigger_rerun"] = False
-if "login_email" not in st.session_state:
-    st.session_state["login_email"] = ""
-if "login_pass" not in st.session_state:
-    st.session_state["login_pass"] = ""
+for key in ["logged_in", "trigger_rerun", "login_email", "login_pass", "access_token", "user_id", "role", "full_name"]:
+    if key not in st.session_state:
+        st.session_state[key] = None if key in ["access_token", "user_id", "role", "full_name"] else False if key=="logged_in" else ""
 
 # --- Header / Description ---
 st.markdown(
@@ -37,10 +32,10 @@ def fill_demo(email, password):
     st.session_state["login_pass"] = password
 
 card_style = """
-    <div style='background-color:{bg}; padding:15px; border-radius:10px; text-align:center;'>
-        <h4 style='color:white'>{role}</h4>
-        <p style='color:white'>{info}</p>
-    </div>
+<div style='background-color:{bg}; padding:15px; border-radius:10px; text-align:center;'>
+    <h4 style='color:white'>{role}</h4>
+    <p style='color:white'>{info}</p>
+</div>
 """
 
 with col1:
@@ -72,12 +67,14 @@ if not st.session_state["logged_in"]:
             if "error" in res:
                 st.error(res["error"])
             else:
-                st.session_state["logged_in"] = True
-                st.session_state["user_id"] = res["user"].id
-                st.session_state["role"] = res["role"]
-                st.session_state["full_name"] = get_user_name(res["user"].id)
-                
-                st.session_state["trigger_rerun"] = not st.session_state["trigger_rerun"]
+                st.session_state.update({
+                    "logged_in": True,
+                    "user_id": res["user"].id,
+                    "role": res["role"],
+                    "full_name": get_user_name(res["user"].id),
+                    "access_token": res["session"].access_token,  # <-- Store JWT for file uploads
+                    "trigger_rerun": not st.session_state["trigger_rerun"]
+                })
                 st.experimental_rerun()
 
     # -------- Sign Up Tab --------
@@ -101,11 +98,14 @@ else:
     st.info("Go to your dashboard from the left panel (Streamlit Pages).")
     
     if st.button("Logout"):
-        st.session_state["logged_in"] = False
-        st.session_state["user_id"] = None
-        st.session_state["role"] = None
-        st.session_state["full_name"] = None
-        st.session_state["login_email"] = ""
-        st.session_state["login_pass"] = ""
-        st.session_state["trigger_rerun"] = not st.session_state["trigger_rerun"]
+        st.session_state.update({
+            "logged_in": False,
+            "user_id": None,
+            "role": None,
+            "full_name": None,
+            "login_email": "",
+            "login_pass": "",
+            "access_token": None,
+            "trigger_rerun": not st.session_state["trigger_rerun"]
+        })
         st.experimental_rerun()
