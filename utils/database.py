@@ -79,7 +79,6 @@ def get_user_appointments(user_id: str, role: str):
         res = supabase.table("appointments").select("*").eq("doctor_id", user_id).execute()
     else:
         res = supabase.table("appointments").select("*").eq("patient_id", user_id).execute()
-    # Convert datetime fields to Python datetime objects for charts
     appointments = res.data if res.data else []
     for appt in appointments:
         if "appointment_time" in appt:
@@ -111,14 +110,18 @@ def unassign_patient(patient_id: str):
 # Patient File Uploads
 # -----------------------
 def upload_patient_file(patient_id: str, file):
-    """Upload a patient's file to Supabase Storage and save record in DB"""
+    """
+    Upload a patient's file to Supabase Storage and save record in DB.
+    Accepts Streamlit UploadedFile objects.
+    """
     if not file:
         return None
 
     file_ext = file.name.split('.')[-1]
     file_name = f"{patient_id}/{uuid.uuid4()}.{file_ext}"
 
-    res = supabase.storage.from_('patient-files').upload(file_name, file)
+    # Upload file as bytes
+    res = supabase.storage.from_('patient-files').upload(file_name, file.read())
     if res.status_code in [200, 201]:
         supabase.table('patient_files').insert({
             "patient_id": patient_id,
@@ -128,7 +131,7 @@ def upload_patient_file(patient_id: str, file):
         }).execute()
         return file_name
     else:
-        raise Exception("Upload failed")
+        raise Exception(f"Upload failed: {res.error}")
 
 def get_patient_files(patient_id: str):
     """Return all files uploaded by a patient"""
