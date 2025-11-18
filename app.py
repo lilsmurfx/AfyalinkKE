@@ -66,21 +66,28 @@ if not st.session_state["logged_in"]:
         if st.button("Login"):
             res = login(email, password)
 
-            # --- Safe handling of login response ---
-            if not res or res.get("error"):
-                st.error(res.get("error", "Login failed. Check credentials."))
-            elif not res.get("session") or not res.get("user"):
-                st.error("Login failed: No session returned. Check credentials or Supabase auth.")
-            else:
-                st.session_state.update({
-                    "logged_in": True,
-                    "user_id": res["user"].get("id"),
-                    "role": res.get("role", "user"),
-                    "full_name": get_user_name(res["user"].get("id")),
-                    "access_token": res["session"].get("access_token"),  # JWT for file uploads
-                    "trigger_rerun": not st.session_state["trigger_rerun"]
-                })
-                st.experimental_rerun()
+        # --- Safe handling of login response ---
+if not res:
+    st.error("Login failed. No response from server.")
+elif res.get("error"):
+    st.error(res.get("error", "Login failed. Check credentials."))
+else:
+    # Extract session safely
+    session = res.get("session")
+    user = res.get("user")
+    if not session or not user:
+        st.error("Login failed: No session returned. Check credentials or Supabase auth.")
+    else:
+        access_token = session.get("access_token")  # safely get JWT
+        st.session_state.update({
+            "logged_in": True,
+            "user_id": user.get("id"),
+            "role": res.get("role", "user"),
+            "full_name": get_user_name(user.get("id")),
+            "access_token": access_token,
+            "trigger_rerun": not st.session_state["trigger_rerun"]
+        })
+        st.experimental_rerun()
 
     # -------- Sign Up Tab --------
     with tabs[1]:
