@@ -6,20 +6,14 @@ import uuid
 # Users / Admin functions
 # -----------------------
 def get_all_users():
-    """Return all users"""
     res = supabase.table("users").select("*").execute()
     return res.data if res.data else []
 
 def get_all_patients():
-    """Return all patients"""
     res = supabase.table("patients").select("*").execute()
     return res.data if res.data else []
 
 def add_patient(name: str, age: int, doctor_id: str, create_user: bool = True):
-    """
-    Add a new patient and optionally create a user account for them.
-    """
-    # Insert into patients table
     supabase.table("patients").insert({
         "name": name,
         "age": age,
@@ -27,19 +21,17 @@ def add_patient(name: str, age: int, doctor_id: str, create_user: bool = True):
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-    # Optionally create a login user for the patient
     if create_user:
         existing = supabase.table("users").select("*").eq("full_name", name).execute()
         if not existing.data:
             supabase.table("users").insert({
                 "full_name": name,
                 "role": "patient",
-                "email": "",  # Optional
-                "password": ""  # Handle default or random password
+                "email": "",
+                "password": ""
             }).execute()
 
 def get_user_name(user_id: str):
-    """Return the full name of a user given their user_id"""
     res = supabase.table("users").select("full_name").eq("id", user_id).single().execute()
     return res.data["full_name"] if res.data else "User"
 
@@ -47,12 +39,10 @@ def get_user_name(user_id: str):
 # Doctor functions
 # -----------------------
 def get_doctor_patients(doctor_id: str):
-    """Get all patients assigned to a doctor"""
     res = supabase.table("patients").select("*").eq("doctor_id", doctor_id).execute()
     return res.data if res.data else []
 
 def add_record(patient_id: str, title: str, description: str):
-    """Add a medical record for a patient"""
     supabase.table("medical_records").insert({
         "patient_id": patient_id,
         "record_title": title,
@@ -61,7 +51,6 @@ def add_record(patient_id: str, title: str, description: str):
     }).execute()
 
 def add_appointment(doctor_id: str, patient_id: str, appointment_time: datetime):
-    """Add a new appointment (datetime serialized to ISO)"""
     supabase.table("appointments").insert({
         "doctor_id": doctor_id,
         "patient_id": patient_id,
@@ -74,7 +63,6 @@ def add_appointment(doctor_id: str, patient_id: str, appointment_time: datetime)
 # Appointments / Patients
 # -----------------------
 def get_user_appointments(user_id: str, role: str):
-    """Get appointments for a doctor or patient"""
     if role == "doctor":
         res = supabase.table("appointments").select("*").eq("doctor_id", user_id).execute()
     else:
@@ -91,7 +79,6 @@ def get_user_appointments(user_id: str, role: str):
 # Patient records
 # -----------------------
 def get_patient_records(patient_id: str):
-    """Get medical records for a patient"""
     res = supabase.table("medical_records").select("*").eq("patient_id", patient_id).execute()
     records = res.data if res.data else []
     for r in records:
@@ -103,7 +90,6 @@ def get_patient_records(patient_id: str):
 # Admin / Unassign
 # -----------------------
 def unassign_patient(patient_id: str):
-    """Remove doctor assignment from patient"""
     supabase.table("patients").update({"doctor_id": None}).eq("id", patient_id).execute()
 
 # -----------------------
