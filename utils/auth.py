@@ -2,7 +2,7 @@
 
 from database.db import supabase
 
-# Replace with your JWT secret for optional token verification
+# Your JWT secret (for verification if needed)
 JWT_SECRET = "vVTbDjDDXDp/Yr7v7nhOZgwG1UBuk0kXy/GuiYskWLLearSKh+oXIo2hnLGswptQPFVWMDGOHv7P2pq9vksihA=="
 
 # ----------------------------
@@ -30,7 +30,7 @@ def login(email: str, password: str):
 
         user_id = res["user"]["id"]
 
-        # Fetch role from your users table (replace "patients" or "doctors" logic as needed)
+        # Fetch role from your tables
         role = fetch_user_role(user_id)
 
         return {
@@ -47,6 +47,7 @@ def login(email: str, password: str):
             "role": None,
             "error": str(e)
         }
+
 
 # ----------------------------
 # Signup function
@@ -80,9 +81,10 @@ def signup(email: str, password: str, role: str, full_name: str):
             "email": email
         }).execute()
 
+        # Signup does not create session automatically
         return {
             "user": res["user"],
-            "session": None,  # Signup does not create session automatically
+            "session": None,
             "role": role,
             "error": None
         }
@@ -95,8 +97,9 @@ def signup(email: str, password: str, role: str, full_name: str):
             "error": str(e)
         }
 
+
 # ----------------------------
-# Helper: fetch user role from your tables
+# Helper: fetch user role
 # ----------------------------
 def fetch_user_role(user_id: str):
     """
