@@ -95,10 +95,11 @@ def unassign_patient(patient_id: str):
 # -----------------------
 # Patient File Uploads
 # -----------------------
-def upload_patient_file(patient_id: str, file):
+def upload_patient_file(patient_id: str, file, user_token: str):
     """
     Upload a patient's file to Supabase Storage and save record in DB.
     Accepts Streamlit UploadedFile objects.
+    `user_token` must be the Supabase JWT of the logged-in user.
     """
     if not file:
         return None
@@ -106,9 +107,12 @@ def upload_patient_file(patient_id: str, file):
     file_ext = file.name.split('.')[-1]
     file_name = f"{patient_id}/{uuid.uuid4()}.{file_ext}"
 
-    # Upload file as bytes
-    res = supabase.storage.from_('patient-files').upload(file_name, file.read())
+    # Upload the file as bytes using the user's JWT
+    supabase_auth = supabase.auth_client(api_key=None, access_token=user_token)
+    res = supabase_auth.storage.from_('patient-files').upload(file_name, file.read())
+
     if res.status_code in [200, 201]:
+        # Insert record in patient_files table
         supabase.table('patient_files').insert({
             "patient_id": patient_id,
             "file_name": file_name,
