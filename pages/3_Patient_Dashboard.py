@@ -30,8 +30,21 @@ user_name = get_user_name(user_id)
 # --- CSS ---
 st.markdown("""
 <style>
-.metric-card { background-color: #2E8B57; color: white; border-radius: 12px; padding: 20px; text-align: center; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);}
-.section-title { color: #2E8B57; font-weight: bold; font-size: 20px; margin-bottom: 10px;}
+.metric-card { 
+    background-color: #2E8B57; 
+    color: white; 
+    border-radius: 12px; 
+    padding: 20px; 
+    text-align: center; 
+    font-weight: bold; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+.section-title { 
+    color: #2E8B57; 
+    font-weight: bold; 
+    font-size: 20px; 
+    margin-bottom: 10px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -103,7 +116,8 @@ if uploaded_file:
         if not user_token:
             st.error("User token missing. Please login again.")
         else:
-            upload_patient_file(user_id, uploaded_file, user_token)  # Pass JWT token
+            # Pass JWT token for secure upload
+            upload_patient_file(patient_id=user_id, file=uploaded_file, user_token=user_token)
             st.success(f"File '{uploaded_file.name}' uploaded successfully!")
             st.experimental_rerun()
     except Exception as e:
