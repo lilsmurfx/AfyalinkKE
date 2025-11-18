@@ -63,24 +63,30 @@ with col3:
 if not st.session_state["logged_in"]:
     tabs = st.tabs(["Login", "Sign Up"])
     
-    # -------- Login Tab --------
-    with tabs[0]:
-        st.subheader("Login")
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pass")
-        if st.button("Login"):
-            res = login(email, password)
-            if "error" in res:
-                st.error(res["error"])
-            else:
-                st.session_state["logged_in"] = True
-                st.session_state["user_id"] = res["user"].id
-                st.session_state["role"] = res["role"]
-                st.session_state["full_name"] = get_user_name(res["user"].id)
-                st.session_state["access_token"] = res["session"]["access_token"]  # <-- store JWT
-
-                st.session_state["trigger_rerun"] = not st.session_state["trigger_rerun"]
-                st.experimental_rerun()
+  # -------- Login Tab --------
+with tabs[0]:
+    st.subheader("Login")
+    email = st.text_input("Email", key="login_email")
+    password = st.text_input("Password", type="password", key="login_pass")
+    
+    if st.button("Login"):
+        res = login(email, password)
+        
+        # --- Safe handling without session/JWT ---
+        if not res:
+            st.error("Login failed. No response from server.")
+        elif res.get("error"):
+            st.error(res["error"])
+        elif not res.get("user"):
+            st.error("Login failed: user not found.")
+        else:
+            user = res["user"]
+            st.session_state["logged_in"] = True
+            st.session_state["user_id"] = user.get("id")
+            st.session_state["role"] = res.get("role", "user")
+            st.session_state["full_name"] = get_user_name(user.get("id"))
+            st.session_state["trigger_rerun"] = not st.session_state["trigger_rerun"]
+            st.experimental_rerun()
 
     # -------- Sign Up Tab --------
     with tabs[1]:
