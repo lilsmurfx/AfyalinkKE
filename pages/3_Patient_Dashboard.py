@@ -15,12 +15,16 @@ from datetime import datetime
 if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
     st.warning("Please login first.")
     st.stop()
+
 if st.session_state.get("role") != "patient":
     st.error("Access denied. Patients only.")
     st.stop()
 
 st.set_page_config(page_title="Patient Dashboard", layout="wide")
-user_id = st.session_state["user_id"]  # Must match Supabase Auth UID
+
+# --- User info ---
+user_id = st.session_state["user_id"]          # Supabase Auth UID
+user_token = st.session_state.get("access_token")  # Supabase JWT
 user_name = get_user_name(user_id)
 
 # --- CSS ---
@@ -96,9 +100,12 @@ st.markdown('<div class="section-title">🧾 Upload Lab Reports / Prescriptions<
 uploaded_file = st.file_uploader("Choose a file", type=["pdf", "png", "jpg", "jpeg"])
 if uploaded_file:
     try:
-        upload_patient_file(user_id, uploaded_file)
-        st.success(f"File '{uploaded_file.name}' uploaded successfully!")
-        st.experimental_rerun()  # Reload to show new file
+        if not user_token:
+            st.error("User token missing. Please login again.")
+        else:
+            upload_patient_file(user_id, uploaded_file, user_token)  # Pass JWT token
+            st.success(f"File '{uploaded_file.name}' uploaded successfully!")
+            st.experimental_rerun()
     except Exception as e:
         st.error(f"Upload failed: {e}")
 
