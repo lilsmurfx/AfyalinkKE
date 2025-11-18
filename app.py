@@ -63,16 +63,20 @@ if not st.session_state["logged_in"]:
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_pass")
         if st.button("Login"):
+            # Call the new safe login function
             res = login(email, password)
-            if "error" in res:
-                st.error(res["error"])
+
+            if not res or res.get("error"):
+                st.error(res.get("error", "Login failed. Please check credentials."))
+            elif not res.get("session") or not res.get("user"):
+                st.error("Login failed: No session returned. Check credentials or Supabase auth.")
             else:
                 st.session_state.update({
                     "logged_in": True,
-                    "user_id": res["user"].id,
-                    "role": res["role"],
-                    "full_name": get_user_name(res["user"].id),
-                    "access_token": res["session"].access_token,  # <-- Store JWT for file uploads
+                    "user_id": res["user"].get("id"),
+                    "role": res.get("role", "user"),
+                    "full_name": get_user_name(res["user"].get("id")),
+                    "access_token": res["session"].get("access_token"),
                     "trigger_rerun": not st.session_state["trigger_rerun"]
                 })
                 st.experimental_rerun()
