@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datetime import datetime
 from utils.database import get_patient_records, get_user_appointments, get_user_name
 
 # --- Access control ---
@@ -20,14 +21,14 @@ user_name = get_user_name(user_id)
 st.markdown("""
 <style>
 .card {
-    background-color: #F5F5F5;  /* Admin dashboard card color */
+    background-color: #F5F5F5;
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 20px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 .metric-card {
-    background-color: #2E8B57;  /* Admin dashboard green theme */
+    background-color: #2E8B57;
     color: white;
     border-radius: 12px;
     padding: 20px;
@@ -67,7 +68,17 @@ appointments = get_user_appointments(user_id, "patient")
 # --- Metrics Cards ---
 total_visits = len(records)
 total_appointments = len(appointments)
-upcoming_appt = pd.to_datetime(appointments[0]['appointment_time']) if appointments else None
+
+# --- FIXED: Safely parse appointment times ---
+upcoming_appt = None
+for a in appointments:
+    try:
+        appt_time = pd.to_datetime(a["appointment_time"])
+        if not upcoming_appt or appt_time < upcoming_appt:
+            if appt_time > datetime.now():
+                upcoming_appt = appt_time
+    except Exception:
+        pass
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -98,7 +109,7 @@ st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown('<div class="section-title">📅 Your Appointments</div>', unsafe_allow_html=True)
 if appointments:
     appt_df = pd.DataFrame(appointments)
-    appt_df['appointment_time'] = pd.to_datetime(appt_df['appointment_time'])
+    appt_df['appointment_time'] = pd.to_datetime(appt_df['appointment_time'], errors='coerce')
     appt_df = appt_df.sort_values('appointment_time')
     st.dataframe(appt_df[['appointment_time', 'status']], height=250)
 
