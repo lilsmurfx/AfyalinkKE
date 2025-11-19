@@ -1,114 +1,88 @@
 # utils/auth.py
+# SIMPLE LOGIN SYSTEM (NO BCRYPT, NO JWT)
+# Adds patient signup → also inserts into patients table
 
-from database.db import supabase
+from datetime import datetime
+from supabase_config import supabase
+from utils.database import get_user_by_email
 
-# Your JWT secret (for later)
-JWT_SECRET = "vVTbDjDDXDp/Yr7v7nhOZgwG1UBuk0kXy/GuiYskWLLearSKh+oXIo2hnLGswptQPFVWMDGOHv7P2pq9vksihA=="
 
-# ----------------------------
-# Login function
-# ----------------------------
-def login(email: str, password: str):
+# -------------------------------------------------------
+# SIMPLE PASSWORD CHECK (plain-text)
+# -------------------------------------------------------
+def verify_password(input_password: str, stored_password: str) -> bool:
     """
-    Logs in a user using email and password.
-    Always returns a dict with keys: user, session, role, error
-    Login succeeds even if no JWT/session is returned.
+    Your Supabase database stores passwords in plain text (e.g., 'doctor3').
+    So authentication uses direct string comparison.
     """
-    try:
-        res = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
+    if not stored_password:
+        return False
 
-        # If login failed
-        if res.get("error") or not res.get("user"):
-            return {
-                "user": None,
-                "session": None,
-                "role": None,
-                "error": res.get("error", {}).get("message", "Login failed")
-            }
-
-        user_id = res["user"]["id"]
-
-        # Determine user role
-        role = get_role_from_db(user_id)
-
-        # Accept that session may be None
-        return {
-            "user": res.get("user"),
-            "session": res.get("session"),  # may be None
-            "role": role,
-            "error": None
-        }
-
-    except Exception as e:
-        return {
-            "user": None,
-            "session": None,
-            "role": None,
-            "error": str(e)
-        }
+    return input_password.strip() == str(stored_password).strip()
 
 
-# ----------------------------
-# Signup
-# ----------------------------
+# -------------------------------------------------------
+# SIGNUP (NOW CREATES ENTRY IN `patients` TABLE TOO)
+# -------------------------------------------------------
 def signup(email: str, password: str, role: str, full_name: str):
-    """
-    Registers a new user and inserts into patients or doctors table
-    """
-    try:
-        res = supabase.auth.sign_up({
-            "email": email,
-            "password": password
-        })
+    # Check if user exists
+    existing = get_user_by_email(email)
+    if existing:
+        return {"error": "User already exists."}
 
-        if res.get("error") or not res.get("user"):
-            return {
-                "user": None,
-                "session": None,
-                "role": None,
-                "error": res.get("error", {}).get("message", "Signup failed")
-            }
+    clean_email = email.strip().lower()
 
-        user_id = res["user"]["id"]
+    # Insert into USERS table
+    res = supabase.table("users").insert({
+        "email": clean_email,
+        "password": password,   # stored as plain text (your current setup)
+        "role": role,
+        "full_name": full_name
+    }).execute()
 
-        # Insert into role-specific table
-        if role == "patient":
-            supabase.table("patients").insert({"user_id": user_id, "full_name": full_name}).execute()
-        else:
-            supabase.table("doctors").insert({"user_id": user_id, "full_name": full_name}).execute()
+    if getattr(res, "error", None):
+        return {"error": str(res.error)}
 
-        return {
-            "user": res.get("user"),
-            "session": res.get("session"),
-            "role": role,
-            "error": None
-        }
+    # Retrieve new user's ID
+    user_id = res.data[0].get("id")
 
-    except Exception as e:
-        return {
-            "user": None,
-            "session": None,
-            "role": None,
-            "error": str(e)
-        }
+    # If the user is a patient → also insert into PATIENTS table
+    if role == "patient":
+        supabase.table("patients").insert({
+            "id": user_id,                     # SAME ID as in users table
+            "doctor_id": None,                 # unassigned at signup
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
+
+    return {
+        "success": True,
+        "message": "Signup successful. Please login.",
+        "user_id": user_id
+    }
 
 
-# ----------------------------
-# Determine role
-# ----------------------------
-def get_role_from_db(user_id: str):
-    """
-    Returns "patient", "doctor", or "admin"
-    """
-    patient = supabase.table("patients").select("id").eq("user_id", user_id).execute()
-    if patient.data:
-        return "patient"
+# -------------------------------------------------------
+# LOGIN
+# -------------------------------------------------------
+def login(email: str, password: str):
+    clean_email = email.strip().lower()
 
-    doctor = supabase.table("doctors").select("id").eq("user_id", user_id).execute()
-    if doctor.data:
-        return "doctor"
+    # Fetch user
+    user = get_user_by_email(clean_email)
 
-    return "admin"
+    if not user:
+        return {"error": "Invalid email or password."}
+
+    stored_pw = user.get("password", "")
+
+    # Plain-text comparison
+    if not verify_password(password, stored_pw):
+        return {"error": "Invalid email or password."}
+
+    # SUCCESS
+    return {
+        "success": True,
+        "user": user,
+        "role": user.get("role", "patient"),
+        "access_token": None  # no JWT in this system
+    }

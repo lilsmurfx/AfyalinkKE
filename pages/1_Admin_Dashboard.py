@@ -1,130 +1,201 @@
+# pages/1_Admin_Dashboard.py
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+from datetime import datetime
 from utils.database import (
-    get_doctor_patients,
-    get_user_appointments,
+    get_all_users,
+    get_all_patients,
     get_user_name,
-    upload_patient_file,
-    get_patient_files
+    get_patient_files,
+    unassign_patient
 )
 from supabase_config import supabase
-from datetime import datetime
 
-# --- Access control ---
+st.set_page_config(page_title="Admin Dashboard", layout="wide")
+
+# -----------------------
+# Access control
+# -----------------------
 if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
     st.warning("Please login first.")
     st.stop()
-if st.session_state.get("role") != "doctor":
-    st.error("Access denied. Doctors only.")
+if st.session_state.get("role") != "admin":
+    st.error("Access denied. Admins only.")
     st.stop()
 
-st.set_page_config(page_title="Doctor Dashboard", layout="wide")
+# -----------------------
+# Header
+# -----------------------
+user_name = get_user_name(st.session_state.get("user_id"))
+st.title(f"Admin Dashboard — {user_name}")
+st.markdown("Manage users, assign/unassign patients to doctors, and inspect patient files.")
+st.markdown("---")
 
-# --- User info ---
-user_id = st.session_state["user_id"]          # Supabase Auth UID
-user_token = st.session_state.get("access_token")  # Supabase JWT
-user_name = get_user_name(user_id)
+# -----------------------
+# Load users
+# -----------------------
+all_users = get_all_users() or []
+doctors = [u for u in all_users if u.get("role") == "doctor"]
+patients = [u for u in all_users if u.get("role") == "patient"]
 
-# --- CSS ---
-st.markdown("""
-<style>
-.metric-card { background-color: #2E8B57; color: white; border-radius: 12px; padding: 20px; text-align: center; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);}
-.section-title { color: #2E8B57; font-weight: bold; font-size: 20px; margin-bottom: 10px;}
-</style>
-""", unsafe_allow_html=True)
-
-# --- Header ---
-st.markdown(f"""
-<div style="
-    background-color: #2E8B57; 
-    padding: 12px; 
-    border-radius: 12px; 
-    color: white; 
-    font-size: 20px;
-    display: flex; 
-    justify-content: space-between;
-    align-items: center;">
-    <div>👨‍⚕️ Dr. {user_name} | Role: Doctor</div>
-    <div><button onclick="window.location.reload();">Logout</button></div>
-</div>
-""", unsafe_allow_html=True)
-
-# --- Fetch Data ---
-patients = get_doctor_patients(user_id)
-appointments = get_user_appointments(user_id, "doctor")
-patient_files = {p['id']: get_patient_files(p['id']) for p in patients} if patients else {}
-
-# --- Metrics Cards ---
+# -----------------------
+# Stats
+# -----------------------
 col1, col2, col3 = st.columns(3)
-with col1:
-    st.markdown(f'<div class="metric-card">🧑‍🤝‍🧑<br>Total Patients<br><h2>{len(patients)}</h2></div>', unsafe_allow_html=True)
-with col2:
-    st.markdown(f'<div class="metric-card">📅<br>Total Appointments<br><h2>{len(appointments)}</h2></div>', unsafe_allow_html=True)
-with col3:
-    next_appt_text = appointments[0]["appointment_time"].strftime("%d %b %Y %H:%M") if appointments else "No upcoming"
-    st.markdown(f'<div class="metric-card">⏰<br>Next Appointment<br><h2>{next_appt_text}</h2></div>', unsafe_allow_html=True)
+col1.metric("Total Doctors", len(doctors))
+col2.metric("Total Patients", len(patients))
 
-st.markdown("<hr>", unsafe_allow_html=True)
+# Count unassigned patients
+unassigned_count = (
+    supabase.table("patients").select("*").is_("doctor_id", None).execute().data
+)
+col3.metric("Unassigned Patients", len(unassigned_count))
 
-# --- Patients Table ---
-st.markdown('<div class="section-title">🧑‍🤝‍🧑 Your Patients</div>', unsafe_allow_html=True)
-if patients:
-    patients_df = pd.DataFrame(patients)[['name', 'age']]
-    st.dataframe(patients_df, height=250)
-else:
-    st.info("No patients assigned yet.")
+st.markdown("---")
 
-# --- Upload Files for a Patient ---
-st.markdown('<div class="section-title">🧾 Upload Files for a Patient</div>', unsafe_allow_html=True)
-if patients:
-    selected_patient_id = st.selectbox(
-        "Select Patient",
-        [p['id'] for p in patients],
-        format_func=lambda x: next(p['name'] for p in patients if p['id'] == x)
+# -----------------------
+# Assign / Unassign Patients
+# -----------------------
+st.header("Assign or Unassign Patients")
+
+# Build dropdown lists
+patient_options = {
+    f"{p.get('full_name') or p.get('email')} — {p.get('id')}": p.get("id")
+    for p in patients
+}
+
+doctor_options = {
+    f"{d.get('full_name') or d.get('email')} — {d.get('id')}": d.get("id")
+    for d in doctors
+}
+
+col_p, col_d = st.columns(2)
+with col_p:
+    selected_patient_label = st.selectbox(
+        "Select patient",
+        ["Select..."] + list(patient_options.keys())
+    )
+with col_d:
+    selected_doctor_label = st.selectbox(
+        "Select doctor",
+        ["Select..."] + list(doctor_options.keys())
     )
 
-    uploaded_file = st.file_uploader("Choose a file", type=["pdf", "png", "jpg", "jpeg"])
-    if uploaded_file:
-        try:
-            if not user_token:
-                st.error("User token missing. Please login again.")
-            else:
-                upload_patient_file(selected_patient_id, uploaded_file, user_token)
-                st.success(f"File '{uploaded_file.name}' uploaded successfully!")
-                st.experimental_rerun()
-        except Exception as e:
-            st.error(f"Upload failed: {e}")
-else:
-    st.info("No patients available for file uploads.")
+assign_col, unassign_col = st.columns(2)
 
-# --- Patient Files ---
-st.markdown('<div class="section-title">📂 Patient Files</div>', unsafe_allow_html=True)
-if patients and patient_files:
-    for pid, files in patient_files.items():
-        patient_name = next(p['name'] for p in patients if p['id'] == pid)
-        st.write(f"### Files for {patient_name}")
-        if files:
-            for f in files:
-                uploaded_at_text = f['uploaded_at'].strftime('%d %b %Y %H:%M') if isinstance(f['uploaded_at'], datetime) else str(f['uploaded_at'])
-                st.write(f"- {f['original_name']} (Uploaded: {uploaded_at_text})")
-                url = supabase.storage.from_('patient-files').get_public_url(f['file_name'])['public_url']
-                st.markdown(f"[Download]({url})")
+# -----------------------
+# ASSIGN PATIENT → DOCTOR (WITH DOCTOR NAME UPDATE)
+# -----------------------
+with assign_col:
+    if st.button("Assign patient to doctor"):
+        if selected_patient_label == "Select..." or selected_doctor_label == "Select...":
+            st.error("Select both a patient and a doctor.")
         else:
-            st.info("No files uploaded yet.")
-else:
-    st.info("No patient files available.")
+            patient_id = patient_options[selected_patient_label]
+            doctor_id = doctor_options[selected_doctor_label]
 
-# --- Appointments Table ---
-st.markdown('<div class="section-title">📅 Your Appointments</div>', unsafe_allow_html=True)
-if appointments:
-    appt_df = pd.DataFrame(appointments).sort_values('appointment_time')
-    st.dataframe(appt_df[['patient_id', 'appointment_time', 'status']], height=250)
-    
-    # Chart appointments per month
-    appt_df['month'] = appt_df['appointment_time'].dt.to_period('M')
-    monthly_count = appt_df.groupby('month').size().reset_index(name='count')
-    fig = px.bar(monthly_count, x='month', y='count', title="Appointments per Month", text='count', color_discrete_sequence=['#2E8B57'])
-    st.plotly_chart(fig, use_container_width=True)
+            # Fetch doctor name
+            doctor_row = supabase.table("users").select("full_name").eq("id", doctor_id).single().execute()
+            doctor_name = doctor_row.data.get("full_name", "Unknown Doctor")
+
+            try:
+                res = supabase.table("patients").update({
+                    "doctor_id": doctor_id,
+                    "doctor_name": doctor_name,
+                    "updated_at": datetime.utcnow().isoformat()
+                }).eq("id", patient_id).execute()
+
+                if getattr(res, "error", None):
+                    st.error(f"Assignment failed: {res.error}")
+                else:
+                    st.success(f"Assigned patient to Dr. {doctor_name}.")
+                    st.experimental_rerun()
+
+            except Exception as e:
+                st.error(f"Assignment error: {e}")
+
+# -----------------------
+# UNASSIGN PATIENT
+# -----------------------
+with unassign_col:
+    if st.button("Unassign patient from doctor"):
+        if selected_patient_label == "Select...":
+            st.error("Select a patient to unassign.")
+        else:
+            patient_id = patient_options[selected_patient_label]
+
+            try:
+                supabase.table("patients").update({
+                    "doctor_id": None,
+                    "doctor_name": None,
+                    "updated_at": datetime.utcnow().isoformat()
+                }).eq("id", patient_id).execute()
+
+                st.success("Patient unassigned successfully.")
+                st.experimental_rerun()
+
+            except Exception as e:
+                st.error(f"Unassign failed: {e}")
+
+st.markdown("---")
+
+# -----------------------
+# Doctors Table
+# -----------------------
+st.header("Doctors")
+if doctors:
+    df = pd.DataFrame(doctors)
+
+    # REMOVE PASSWORD COLUMN
+    if "password" in df.columns:
+        df = df.drop(columns=["password"])
+
+    st.dataframe(df)
 else:
-    st.info("No scheduled appointments.")
+    st.info("No doctors found.")
+
+st.markdown("---")
+
+# -----------------------
+# Patients Table
+# -----------------------
+st.header("Patients")
+if patients:
+    dfp = pd.DataFrame(patients)
+
+    # REMOVE PASSWORD COLUMN
+    if "password" in dfp.columns:
+        dfp = dfp.drop(columns=["password"])
+
+    st.dataframe(dfp)
+else:
+    st.info("No patients found.")
+
+st.markdown("---")
+
+# -----------------------
+# Patient File Inspection
+# -----------------------
+st.header("Inspect Patient Files")
+
+if patient_options:
+    inspect_label = st.selectbox(
+        "Choose patient to view uploaded files",
+        ["Select..."] + list(patient_options.keys()),
+        key="inspect_patient"
+    )
+
+    if inspect_label != "Select...":
+        pid = patient_options[inspect_label]
+
+        try:
+            files = get_patient_files(pid)
+            if files:
+                st.table(files)
+            else:
+                st.info("No files uploaded for this patient.")
+        except Exception as e:
+            st.error(f"Error fetching files: {e}")
+
+else:
+    st.info("No patients found.")
