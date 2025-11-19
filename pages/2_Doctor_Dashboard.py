@@ -1,8 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
-from utils.database import get_doctor_patients, add_record, get_user_appointments, add_appointment, get_user_name
+from datetime import datetime, timezone
+from utils.database import (
+    get_doctor_patients,
+    add_record,
+    get_user_appointments,
+    add_appointment,
+    get_user_name,
+)
 
 # --- Access control ---
 if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
@@ -18,14 +24,17 @@ doctor_id = st.session_state["user_id"]
 doctor_name = get_user_name(doctor_id)
 
 # --- Custom CSS ---
-st.markdown("""
+st.markdown(
+    """
 <style>
 .header-bar {background-color: #2E8B57; padding: 15px; border-radius: 10px; color: white; font-size: 22px; font-weight: bold; margin-bottom: 20px;}
 .section-title {font-size: 22px; font-weight: bold; color: #2E8B57; margin-top: 25px;}
 .card {background-color: #F5F5F5; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;}
 .metric-card {background-color: #4CAF50; color: white; padding: 20px; border-radius: 12px; text-align: center; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # --- Header Bar ---
 st.markdown(f"<div class='header-bar'>👨‍⚕️ Dr. {doctor_name} — Dashboard</div>", unsafe_allow_html=True)
@@ -37,30 +46,75 @@ with logout_container:
     with logout_col2:
         if st.button("Logout"):
             st.session_state.clear()
-            st.experimental_rerun()
+            st.rerun()
 
 # ------------------------
 # Fetch fresh data
 # ------------------------
-patients = get_doctor_patients(doctor_id)
-appointments = get_user_appointments(doctor_id, "doctor")
+patients = get_doctor_patients(doctor_id) or []
+appointments = get_user_appointments(doctor_id, "doctor") or []
+
+# Normalize appointments: parse appointment_time to timezone-aware UTC
+def parse_appointment_time(val):
+    """
+    Robustly parse an appointment_time value into a timezone-aware pandas.Timestamp (UTC).
+    Accepts str, datetime, pandas.Timestamp.
+    """
+    try:
+        return pd.to_datetime(val, utc=True)
+    except Exception:
+        # As fallback, try manual conversion
+        try:
+            if isinstance(val, datetime):
+                if val.tzinfo is None:
+                    return pd.to_datetime(val).tz_localize(timezone.utc)
+                else:
+                    return pd.to_datetime(val).tz_convert(timezone.utc)
+        except Exception:
+            return pd.NaT
+
+for a in appointments:
+    a_appt = parse_appointment_time(a.get("appointment_time"))
+    # store back as ISO string or pandas.Timestamp depending on how your DB expects it.
+    # For internal use we store the Timestamp object:
+    a["appointment_time_parsed"] = a_appt
 
 # ------------------------
 # STAT CARDS
 # ------------------------
 total_patients = len(patients)
 total_appointments = len(appointments)
-upcoming_appointments = sum(
-    1 for a in appointments if pd.to_datetime(a["appointment_time"]) > datetime.now()
-) if appointments else 0
+
+now_utc = datetime.now(timezone.utc)
+
+upcoming_appointments = (
+    sum(
+        1
+        for a in appointments
+        if a.get("appointment_time_parsed") is not pd.NaT
+        and pd.notna(a.get("appointment_time_parsed"))
+        and a["appointment_time_parsed"] > pd.Timestamp(now_utc)
+    )
+    if appointments
+    else 0
+)
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.markdown(f"<div class='metric-card'><div style='font-size:34px;'>🧑‍🤝‍🧑</div><div style='font-size:28px;'>{total_patients}</div><div>Total Patients</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='metric-card'><div style='font-size:34px;'>🧑‍🤝‍🧑</div><div style='font-size:28px;'>{total_patients}</div><div>Total Patients</div></div>",
+        unsafe_allow_html=True,
+    )
 with col2:
-    st.markdown(f"<div class='metric-card' style='background-color:#388E3C;'><div style='font-size:34px;'>📅</div><div style='font-size:28px;'>{total_appointments}</div><div>All Appointments</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='metric-card' style='background-color:#388E3C;'><div style='font-size:34px;'>📅</div><div style='font-size:28px;'>{total_appointments}</div><div>All Appointments</div></div>",
+        unsafe_allow_html=True,
+    )
 with col3:
-    st.markdown(f"<div class='metric-card' style='background-color:#2E7D32;'><div style='font-size:34px;'>⏳</div><div style='font-size:28px;'>{upcoming_appointments}</div><div>Upcoming Appointments</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='metric-card' style='background-color:#2E7D32;'><div style='font-size:34px;'>⏳</div><div style='font-size:28px;'>{upcoming_appointments}</div><div>Upcoming Appointments</div></div>",
+        unsafe_allow_html=True,
+    )
 
 # ------------------------
 # PATIENT LIST
@@ -68,8 +122,11 @@ with col3:
 st.markdown("<div class='section-title'>🧑‍🤝‍🧑 Your Patients</div>", unsafe_allow_html=True)
 with st.container():
     if patients:
+        # Ensure consistent column names
         patient_df = pd.DataFrame(patients)
-        st.dataframe(patient_df[['id', 'name', 'age']], height=200)
+        # Safely handle missing columns
+        display_cols = [c for c in ["id", "name", "age"] if c in patient_df.columns]
+        st.dataframe(patient_df[display_cols], height=200)
     else:
         st.info("You have no assigned patients yet.")
 
@@ -89,7 +146,7 @@ with st.container():
             else:
                 add_record(record_patient_id, title, description)
                 st.success("Medical record added successfully!")
-                st.experimental_rerun()  # reload dashboard to reflect new records
+                st.rerun()  # reload dashboard to reflect new records
 
 # ------------------------
 # SCHEDULE APPOINTMENT
@@ -97,18 +154,23 @@ with st.container():
 st.markdown("<div class='section-title'>📅 Schedule Appointment</div>", unsafe_allow_html=True)
 with st.container():
     if patients:
-        patient_choices = {p['name']: p['id'] for p in patients}
+        # Build a mapping patient_name -> id (use unique names or show both if needed)
+        patient_choices = {p.get("name", f"Patient {p.get('id')}"): p.get("id") for p in patients}
         with st.form("schedule_form"):
             patient_name = st.selectbox("Select Patient", list(patient_choices.keys()))
-            appointment_patient_id = patient_choices[patient_name]
-            date = st.date_input("Select Date", datetime.today())
-            time = st.time_input("Select Time", datetime.now().time())
+            appointment_patient_id = patient_choices.get(patient_name)
+            # Use local date/time pickers; we'll convert to UTC-aware datetime before saving
+            date_selected = st.date_input("Select Date", datetime.now().date())
+            time_selected = st.time_input("Select Time", datetime.now().time())
             submitted_appointment = st.form_submit_button("Schedule")
             if submitted_appointment:
-                appt_dt = datetime.combine(date, time)
-                add_appointment(doctor_id, appointment_patient_id, appt_dt)
-                st.success(f"Appointment scheduled for {patient_name} on {appt_dt}")
-                st.experimental_rerun()  # reload dashboard to show new appointment
+                # Combine into naive datetime, then make timezone-aware in UTC
+                appt_naive = datetime.combine(date_selected, time_selected)
+                appt_aware_utc = appt_naive.replace(tzinfo=timezone.utc)
+                # Persist using the expected format (datetime or ISO string) - using datetime object here
+                add_appointment(doctor_id, appointment_patient_id, appt_aware_utc)
+                st.success(f"Appointment scheduled for {patient_name} on {appt_aware_utc.isoformat()}")
+                st.rerun()  # reload dashboard to show new appointment
     else:
         st.warning("You have no patients to schedule appointments for.")
 
@@ -116,26 +178,41 @@ with st.container():
 # APPOINTMENTS CALENDAR
 # ------------------------
 st.markdown("<div class='section-title'>📊 Appointments Calendar</div>", unsafe_allow_html=True)
-appointments = get_user_appointments(doctor_id, "doctor")  # fetch fresh appointments
-with st.container():
-    if appointments:
-        df = pd.DataFrame(appointments)
-        df['appointment_time'] = pd.to_datetime(df['appointment_time'])
-        df['date'] = df['appointment_time'].dt.date
-        df['hour'] = df['appointment_time'].dt.hour
-        df['patient_name'] = df['patient_id'].map(
-            lambda pid: next((p['name'] for p in patients if p['id'] == pid), "Unknown")
-        )
-        fig = px.scatter(
-            df,
-            x='hour',
-            y='date',
-            color='patient_name',
-            hover_data=['status', 'patient_id'],
-            labels={'hour': 'Hour of Day', 'date': 'Date'},
-            title="Appointments Overview"
-        )
-        fig.update_layout(yaxis=dict(autorange="reversed"), height=600)
-        st.plotly_chart(fig, use_container_width=True)
+appointments = get_user_appointments(doctor_id, "doctor") or []
+
+# Build dataframe safely and normalize times to UTC-aware timestamps
+if appointments:
+    df = pd.DataFrame(appointments)
+
+    # If appointment_time_parsed exists from earlier normalization, prefer it
+    if "appointment_time_parsed" in df.columns:
+        df["appointment_time"] = df["appointment_time_parsed"]
     else:
-        st.info("No scheduled appointments yet.")
+        df["appointment_time"] = pd.to_datetime(df["appointment_time"], utc=True)
+
+    # Drop rows with invalid times
+    df = df[pd.notna(df["appointment_time"])].copy()
+
+    # Map patient ids to names
+    patient_map = {p.get("id"): p.get("name", f"Patient {p.get('id')}") for p in patients}
+    # For safety, also map string version of id
+    patient_map_str = {str(k): v for k, v in patient_map.items()}
+    df["patient_name"] = df["patient_id"].map(patient_map).fillna(df["patient_id"].map(patient_map_str)).fillna("Unknown")
+
+    # Prepare plotting fields
+    df["date"] = df["appointment_time"].dt.date
+    df["hour"] = df["appointment_time"].dt.hour
+
+    fig = px.scatter(
+        df,
+        x="hour",
+        y="date",
+        color="patient_name",
+        hover_data=["status", "patient_id", "appointment_time"],
+        labels={"hour": "Hour of Day", "date": "Date"},
+        title="Appointments Overview",
+    )
+    fig.update_layout(yaxis=dict(autorange="reversed"), height=600)
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("No scheduled appointments yet.")

@@ -46,17 +46,20 @@ card_style = """
 with col1:
     if st.button("Login as Admin"):
         fill_demo("admin-admin2@gmail.com", "admin2")
-    st.markdown(card_style.format(bg="#1abc9c", role="Admin", info="Email: admin-admin2@gmail.com<br>Password: admin2"), unsafe_allow_html=True)
+    st.markdown(card_style.format(bg="#1abc9c", role="Admin",
+                                  info="Email: admin-admin2@gmail.com<br>Password: admin2"), unsafe_allow_html=True)
 
 with col2:
     if st.button("Login as Doctor"):
         fill_demo("doctor3@afyalink.com", "doctor3")
-    st.markdown(card_style.format(bg="#3498db", role="Doctor", info="Email: doctor3@afyalink.com<br>Password: doctor3"), unsafe_allow_html=True)
+    st.markdown(card_style.format(bg="#3498db", role="Doctor",
+                                  info="Email: doctor3@afyalink.com<br>Password: doctor3"), unsafe_allow_html=True)
 
 with col3:
     if st.button("Login as Patient"):
         fill_demo("patient2@gmail.com", "patient2")
-    st.markdown(card_style.format(bg="#e74c3c", role="Patient", info="Email: patient2@gmail.com<br>Password: patient2"), unsafe_allow_html=True)
+    st.markdown(card_style.format(bg="#e74c3c", role="Patient",
+                                  info="Email: patient2@gmail.com<br>Password: patient2"), unsafe_allow_html=True)
 
 # --- Logged Out State ---
 if not st.session_state["logged_in"]:
@@ -65,8 +68,11 @@ if not st.session_state["logged_in"]:
     # -------- Login Tab --------
     with tabs[0]:
         st.subheader("Login")
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pass")
+
+        # Autofill preserved
+        email = st.text_input("Email", key="login_email", value=st.session_state["login_email"])
+        password = st.text_input("Password", type="password", key="login_pass", value=st.session_state["login_pass"])
+
         if st.button("Login"):
             res = login(email, password)
             if "error" in res:
@@ -76,9 +82,9 @@ if not st.session_state["logged_in"]:
                 st.session_state["user_id"] = res["user"].id
                 st.session_state["role"] = res["role"]
                 st.session_state["full_name"] = get_user_name(res["user"].id)
-                
+
                 st.session_state["trigger_rerun"] = not st.session_state["trigger_rerun"]
-                st.experimental_rerun()
+                st.rerun()  # FIXED
 
     # -------- Sign Up Tab --------
     with tabs[1]:
@@ -87,6 +93,7 @@ if not st.session_state["logged_in"]:
         email = st.text_input("Email", key="signup_email")
         password = st.text_input("Password", type="password", key="signup_pass")
         role = st.selectbox("Role", ["patient", "doctor"])
+
         if st.button("Sign Up"):
             res = signup(email, password, role, full_name)
             if "error" in res:
@@ -99,7 +106,7 @@ else:
     st.success(f"Welcome, {st.session_state.get('full_name', 'User')}!")
     st.info(f"You are logged in as: {st.session_state['role']}")
     st.info("Go to your dashboard from the left panel (Streamlit Pages).")
-    
+
     if st.button("Logout"):
         st.session_state["logged_in"] = False
         st.session_state["user_id"] = None
@@ -108,4 +115,4 @@ else:
         st.session_state["login_email"] = ""
         st.session_state["login_pass"] = ""
         st.session_state["trigger_rerun"] = not st.session_state["trigger_rerun"]
-        st.experimental_rerun()
+        st.rerun()  # FIXED
