@@ -1,34 +1,114 @@
-from supabase_config import supabase
+# utils/auth.py
 
-def signup(email: str, password: str, role: str, full_name: str):
-    if not email or not password:
-        return {"error": "Email and password are required"}
+from database.db import supabase
 
-    user = supabase.auth.sign_up({"email": email, "password": password})
-    if user.user is None:
-        return {"error": "Signup failed. Check email or password."}
+# Your JWT secret (for later)
+JWT_SECRET = "vVTbDjDDXDp/Yr7v7nhOZgwG1UBuk0kXy/GuiYskWLLearSKh+oXIo2hnLGswptQPFVWMDGOHv7P2pq9vksihA=="
 
-    # Insert into users table
-    supabase.table("users").insert({
-        "id": user.user.id,
-        "email": email,
-        "role": role,
-        "full_name": full_name
-    }).execute()
-
-    return {"success": True, "user_id": user.user.id}
-
+# ----------------------------
+# Login function
+# ----------------------------
 def login(email: str, password: str):
-    if not email or not password:
-        return {"error": "Email and password are required"}
+    """
+    Logs in a user using email and password.
+    Always returns a dict with keys: user, session, role, error
+    Login succeeds even if no JWT/session is returned.
+    """
+    try:
+        res = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
 
-    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-    if res.user is None:
-        return {"error": "Login failed or email not confirmed"}
+        # If login failed
+        if res.get("error") or not res.get("user"):
+            return {
+                "user": None,
+                "session": None,
+                "role": None,
+                "error": res.get("error", {}).get("message", "Login failed")
+            }
 
-    # Fetch role from users table
-    user_data = supabase.table("users").select("*").eq("id", res.user.id).single().execute()
-    if not user_data.data:
-        return {"error": "User data not found"}
+        user_id = res["user"]["id"]
 
-    return {"user": res.user, "role": user_data.data["role"]}
+        # Determine user role
+        role = get_role_from_db(user_id)
+
+        # Accept that session may be None
+        return {
+            "user": res.get("user"),
+            "session": res.get("session"),  # may be None
+            "role": role,
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "user": None,
+            "session": None,
+            "role": None,
+            "error": str(e)
+        }
+
+
+# ----------------------------
+# Signup
+# ----------------------------
+def signup(email: str, password: str, role: str, full_name: str):
+    """
+    Registers a new user and inserts into patients or doctors table
+    """
+    try:
+        res = supabase.auth.sign_up({
+            "email": email,
+            "password": password
+        })
+
+        if res.get("error") or not res.get("user"):
+            return {
+                "user": None,
+                "session": None,
+                "role": None,
+                "error": res.get("error", {}).get("message", "Signup failed")
+            }
+
+        user_id = res["user"]["id"]
+
+        # Insert into role-specific table
+        if role == "patient":
+            supabase.table("patients").insert({"user_id": user_id, "full_name": full_name}).execute()
+        else:
+            supabase.table("doctors").insert({"user_id": user_id, "full_name": full_name}).execute()
+
+        return {
+            "user": res.get("user"),
+            "session": res.get("session"),
+            "role": role,
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "user": None,
+            "session": None,
+            "role": None,
+            "error": str(e)
+        }
+
+
+# ----------------------------
+# Determine role
+# ----------------------------
+def get_role_from_db(user_id: str):
+    """
+    Returns "patient", "doctor", or "admin"
+    """
+    patient = supabase.table("patients").select("id").eq("user_id", user_id).execute()
+    if patient.data:
+        return "patient"
+
+    doctor = supabase.table("doctors").select("id").eq("user_id", user_id).execute()
+    if doctor.data:
+        return "doctor"
+
+    return "admin"
