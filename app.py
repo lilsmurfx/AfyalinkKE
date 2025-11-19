@@ -14,7 +14,7 @@ default_state = {
     "user_id": None,
     "role": None,
     "full_name": None,
-    "access_token": None
+    "access_token": None,
 }
 
 for key, value in default_state.items():
@@ -28,19 +28,15 @@ for key, value in default_state.items():
 st.markdown(
     """
     <style>
-
-    /* GLOBAL FONT */
     html, body, [class*="css"] {
         font-family: "Inter", sans-serif !important;
         color: #1F2937;
     }
 
-    /* MAIN BACKGROUND */
     .reportview-container {
         background: linear-gradient(145deg, #eef2f3, #ffffff);
     }
 
-    /* HERO SECTION */
     .hero-title {
         font-size: 52px;
         color: #0F172A;
@@ -68,7 +64,6 @@ st.markdown(
         box-shadow: 0px 12px 28px rgba(0,0,0,0.12);
     }
 
-    /* FEATURES */
     .feature-card {
         background: white;
         padding: 30px;
@@ -77,23 +72,24 @@ st.markdown(
         text-align: center;
         transition: transform .25s ease, box-shadow .25s ease;
     }
+
     .feature-card:hover {
         transform: translateY(-6px);
         box-shadow: 0px 14px 30px rgba(0,0,0,0.12);
     }
+
     .feature-title {
         font-size: 20px;
         font-weight: 700;
         color: #0F172A;
         margin-top: 12px;
     }
+
     .feature-desc {
         font-size: 14px;
         color: #475569;
-        margin-top: 4px;
     }
 
-    /* LOGIN CARDS */
     .demo-card {
         background: #ffffff;
         padding: 16px;
@@ -104,7 +100,6 @@ st.markdown(
         margin-bottom: 14px;
     }
 
-    /* TABS THEME */
     .stTabs [role="tab"] {
         background: #e2e8f0;
         border-radius: 7px;
@@ -112,13 +107,14 @@ st.markdown(
         font-weight: 600;
         color: #1e293b;
     }
+
     .stTabs [aria-selected="true"] {
         background: #0ea5e9 !important;
         color: white !important;
     }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
@@ -128,7 +124,7 @@ st.markdown(
 st.markdown("<div class='hero-title'>AfyaLink Medical Platform</div>", unsafe_allow_html=True)
 st.markdown(
     "<div class='hero-sub'>Connecting patients, doctors, and administrators in one seamless ecosystem.</div>",
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 st.markdown(
@@ -144,6 +140,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 # ======================================================================
 # FEATURES GRID
@@ -229,7 +226,6 @@ if not st.session_state["logged_in"]:
 
     # LOGIN TAB
     with tabs[0]:
-
         email = st.text_input("Email", key="login_email", value=st.session_state["login_email"])
         password = st.text_input("Password", type="password", key="login_pass", value=st.session_state["login_pass"])
 
@@ -244,7 +240,7 @@ if not st.session_state["logged_in"]:
                 st.session_state["user_id"] = user.get("id")
                 st.session_state["role"] = user.get("role")
                 st.session_state["full_name"] = get_user_name(user.get("id"))
-                st.experimental_rerun()
+                st.rerun()   # ✅ FIXED
 
     # SIGNUP TAB
     with tabs[1]:
@@ -267,4 +263,4 @@ else:
 
     if st.button("Logout"):
         st.session_state.update(default_state)
-        st.experimental_rerun()
+        st.rerun()   # ✅ FIXED
